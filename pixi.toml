@@ -27,8 +27,8 @@ backend = { name = "pixi-build-mojo", version = "0.2.*" }
 pkg = { name = "morrow", path = "morrow" }
 
 [package.build-dependencies]
-mojo-compiler = "==1.2.0.dev2026092105"
-mojo = "==1.2.0.dev2026092105"
+mojo-compiler = "==1.2.0.dev2026100805"
+mojo = "==1.2.0.dev2026100805"
 
 [dependencies]
-mojo = "==1.2.0.dev2026092105"
+mojo = "==1.2.0.dev2026100805"
