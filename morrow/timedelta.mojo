@@ -1,5 +1,5 @@
 from std.format import Writable, Writer
-from std.hashlib import Hasher
+from std.hash import Hasher
 
 comptime SECONDS_OF_DAY = 24 * 3600
 

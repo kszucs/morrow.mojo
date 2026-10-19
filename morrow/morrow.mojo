@@ -38,7 +38,7 @@ from .constants import (
 from std.iter import StopIteration
 from std.collections import List
 from std.format import Writable, Writer
-from std.hashlib import Hasher
+from std.hash import Hasher
 
 
 comptime _DI400Y = 146097  # number of days in 400 years
