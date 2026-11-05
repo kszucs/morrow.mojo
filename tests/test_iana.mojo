@@ -340,7 +340,7 @@ def test_named_zones_are_shared() raises:
     var first = TimeZone.from_name("Europe/Paris")
     var second = TimeZone.from_name("Europe/Paris")
     assert_true(
-        first._data.value().unsafe_ptr() == second._data.value().unsafe_ptr()
+        first._data.value().ptr() == second._data.value().ptr()
     )
     # Names absent from tzdata still reach ICU and its validation.
     with assert_raises(contains="unknown IANA timezone"):
