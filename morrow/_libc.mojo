@@ -138,7 +138,7 @@ def to_char_ptr(s: String) -> Pointer[c_char, MutUntrackedOrigin]:
     """Only ASCII-based strings."""
     var ptr = unsafe_alloc[c_char](s.byte_length())
     for i in range(s.byte_length()):
-        ptr.unsafe_store(i, UInt8(ord(s[byte=i])))
+        ptr.unsafe_store(i, c_char(s.as_bytes()[i]))
     return ptr
 
 
