@@ -240,7 +240,7 @@ struct TimeFrame(Copyable, Movable):
 
     @staticmethod
     def _check_text(text: String) raises:
-        if text.find(_FIELD) >= 0 or text.find(_ITEM) >= 0:
+        if _FIELD in text or _ITEM in text:
             raise Error("timeframe text contains a reserved control character")
 
     @staticmethod
@@ -253,7 +253,7 @@ struct TimeFrame(Copyable, Movable):
         return self._data.byte_length() == 0
 
     def is_plain(self) -> Bool:
-        return not self.is_missing() and self._data.find(_FIELD) < 0
+        return not self.is_missing() and _FIELD not in self._data
 
     def _item_count(self) -> Int:
         if self.is_missing():
@@ -1132,9 +1132,10 @@ struct Locale(Copyable, Movable, Writable):
                 var template = self.past if negative else self.future
                 if compact:
                     template = template.replace(" ", "")
-                var placeholder = template.find("{0}")
-                if placeholder < 0:
+                var found = template.find("{0}")
+                if not found:
                     continue
+                var placeholder = found.value()
                 var prefix = String(template[byte=0:placeholder])
                 var suffix = String(template[byte = placeholder + 3 :])
                 var inner_end = text.byte_length() - suffix.byte_length()

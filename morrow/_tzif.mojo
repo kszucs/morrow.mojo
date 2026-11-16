@@ -28,7 +28,7 @@ def _zone_path(zone: String) -> String:
         return _zone_path(name)
     if (
         zone.byte_length() == 0
-        or zone.find("..") >= 0
+        or ".." in zone
         or zone.as_bytes()[0] == 47
     ):
         return ""
