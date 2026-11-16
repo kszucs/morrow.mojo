@@ -1,5 +1,10 @@
+"""TimeDelta, a duration normalized to days, seconds and microseconds."""
+
 from std.format import Writable, Writer
 from std.hash import Hasher
+
+from ._text import pad
+
 
 comptime SECONDS_OF_DAY = 24 * 3600
 
@@ -93,15 +98,9 @@ struct TimeDelta(
             else:
                 result += String(self.days) + " day, "
 
-        result += (
-            String(hh)
-            + ":"
-            + String(mm).ascii_rjust(2, "0")
-            + ":"
-            + String(ss).ascii_rjust(2, "0")
-        )
+        result += String(hh) + ":" + pad(mm, 2) + ":" + pad(ss, 2)
         if self.microseconds != 0:
-            result += "." + String(self.microseconds).ascii_rjust(6, "0")
+            result += "." + pad(self.microseconds, 6)
         return result
 
     def total_seconds(self) -> Float64:

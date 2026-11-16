@@ -4,6 +4,7 @@ Named zones are parsed once into `ZoneData`, shared by every copy of a
 `TimeZone`, so conversions need no file or ICU access. ICU remains the
 fallback when no zone file exists.
 """
+
 from std.collections import Optional
 from std.ffi import _get_global, external_call
 from std.memory import ArcPointer, Pointer
@@ -11,9 +12,10 @@ from std.memory.alloc import unsafe_alloc
 from std.os import getenv
 from std.os.path import exists
 
-from .util import _days_in_month, _ymd2ord
+from ._text import is_digit, is_alpha
+from ._calendar import UNIX_EPOCH_ORDINAL, days_in_month, ymd2ord
 
-comptime _EPOCH_ORDINAL = 719163
+
 comptime _WINDOW = 93600  # 26 hours: wider than any UTC offset.
 
 
@@ -22,14 +24,16 @@ def _zone_path(zone: String) -> String:
         var tz = getenv("TZ")
         if tz.byte_length() == 0:
             return "/etc/localtime" if exists("/etc/localtime") else ""
-        var name = String(tz[byte=1:]) if tz.as_bytes()[0] == 58 else tz
-        if name.byte_length() > 0 and name.as_bytes()[0] == 47:
+        var name = (
+            String(tz[byte=1:]) if Int(tz.as_bytes()[0]) == ord(":") else tz
+        )
+        if name.byte_length() > 0 and Int(name.as_bytes()[0]) == ord("/"):
             return name if exists(name) else ""
         return _zone_path(name)
     if (
         zone.byte_length() == 0
         or ".." in zone
-        or zone.as_bytes()[0] == 47
+        or Int(zone.as_bytes()[0]) == ord("/")
     ):
         return ""
     var roots = List[String]()
@@ -78,14 +82,6 @@ def _i64(data: List[UInt8], pos: Int) -> Int:
     return value
 
 
-def _is_alpha(byte: Int) -> Bool:
-    return (byte >= 65 and byte <= 90) or (byte >= 97 and byte <= 122)
-
-
-def _is_digit(byte: Int) -> Bool:
-    return byte >= 48 and byte <= 57
-
-
 struct _Cursor:
     """Parser position over a POSIX TZ string."""
 
@@ -104,7 +100,7 @@ struct _Cursor:
     def number(mut self) raises -> Int:
         var start = self.pos
         var value = 0
-        while _is_digit(self.peek()):
+        while is_digit(self.peek()):
             value = value * 10 + self.peek() - 48
             self.pos += 1
         if self.pos == start:
@@ -114,13 +110,13 @@ struct _Cursor:
     def name(mut self) raises -> String:
         var start = self.pos
         if self.peek() == 60:
-            while self.peek() != 62:
+            while self.peek() != ord(">"):
                 if self.peek() < 0:
                     raise Error("invalid POSIX TZ name")
                 self.pos += 1
             self.pos += 1
             return String(self.text[byte = start + 1 : self.pos - 1])
-        while _is_alpha(self.peek()):
+        while is_alpha(self.peek()):
             self.pos += 1
         if self.pos - start < 3:
             raise Error("invalid POSIX TZ name")
@@ -129,16 +125,16 @@ struct _Cursor:
     def seconds(mut self) raises -> Int:
         """[+-]hh[:mm[:ss]] as signed seconds."""
         var sign = 1
-        if self.peek() == 45:
+        if self.peek() == ord("-"):
             sign = -1
             self.pos += 1
-        elif self.peek() == 43:
+        elif self.peek() == ord("+"):
             self.pos += 1
         var total = self.number() * 3600
-        if self.peek() == 58:
+        if self.peek() == ord(":"):
             self.pos += 1
             total += self.number() * 60
-            if self.peek() == 58:
+            if self.peek() == ord(":"):
                 self.pos += 1
                 total += self.number()
         return sign * total
@@ -159,26 +155,26 @@ struct _Rule(Copyable, ImplicitlyCopyable, Movable):
         var ordinal: Int
         if self.kind == 0:
             var day = self.day
-            if day >= 60 and _days_in_month(year, 2) == 29:
+            if day >= 60 and days_in_month(year, 2) == 29:
                 day += 1
-            ordinal = _ymd2ord(year, 1, 1) + day - 1
+            ordinal = ymd2ord(year, 1, 1) + day - 1
         elif self.kind == 1:
-            ordinal = _ymd2ord(year, 1, 1) + self.day
+            ordinal = ymd2ord(year, 1, 1) + self.day
         else:
-            var first = _ymd2ord(year, self.month, 1)
+            var first = ymd2ord(year, self.month, 1)
             var day = 1 + (self.day - first % 7 + 7) % 7 + (self.week - 1) * 7
-            while day > _days_in_month(year, self.month):
+            while day > days_in_month(year, self.month):
                 day -= 7
             ordinal = first + day - 1
-        return (ordinal - _EPOCH_ORDINAL) * 86400 + self.time
+        return (ordinal - UNIX_EPOCH_ORDINAL) * 86400 + self.time
 
 
 def _parse_rule(mut cursor: _Cursor) raises -> _Rule:
     var rule: _Rule
-    if cursor.peek() == 74:
+    if cursor.peek() == ord("J"):
         cursor.pos += 1
         rule = _Rule(0, 0, 0, cursor.number(), 7200)
-    elif cursor.peek() == 77:
+    elif cursor.peek() == ord("M"):
         cursor.pos += 1
         var month = cursor.number()
         cursor.pos += 1
@@ -187,7 +183,7 @@ def _parse_rule(mut cursor: _Cursor) raises -> _Rule:
         rule = _Rule(2, month, week, cursor.number(), 7200)
     else:
         rule = _Rule(1, 0, 0, cursor.number(), 7200)
-    if cursor.peek() == 47:
+    if cursor.peek() == ord("/"):
         cursor.pos += 1
         rule.time = cursor.seconds()
     return rule
@@ -445,13 +441,13 @@ def _parse_footer(footer: String, mut zone: ZoneData) raises:
         return
     zone.dst_name = cursor.name()
     zone.dst_offset = zone.std_offset + 3600
-    if cursor.peek() != 44 and cursor.peek() >= 0:
+    if cursor.peek() != ord(",") and cursor.peek() >= 0:
         zone.dst_offset = -cursor.seconds()
-    if cursor.peek() != 44:
+    if cursor.peek() != ord(","):
         raise Error("POSIX TZ rule is missing")
     cursor.pos += 1
     zone.start = _parse_rule(cursor)
-    if cursor.peek() != 44:
+    if cursor.peek() != ord(","):
         raise Error("POSIX TZ end rule is missing")
     cursor.pos += 1
     zone.end = _parse_rule(cursor)
@@ -472,15 +468,15 @@ def _dst_amount(offset: Int, previous: Int, following: Int) -> Int:
 def _parse(data: List[UInt8]) raises -> ZoneData:
     if (
         len(data) < 44
-        or data[0] != 84
-        or data[1] != 90
-        or data[2] != 105
-        or data[3] != 102
+        or Int(data[0]) != ord("T")
+        or Int(data[1]) != ord("Z")
+        or Int(data[2]) != ord("i")
+        or Int(data[3]) != ord("f")
     ):
         raise Error("not a TZif file")
     var base = 0
     var time_size = 4
-    if data[4] >= 50:
+    if Int(data[4]) >= ord("2"):
         base = 44 + (
             _u32(data, 32) * 5
             + _u32(data, 36) * 6
