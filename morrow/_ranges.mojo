@@ -92,9 +92,9 @@ struct MorrowSpanIterator(Copyable, ImplicitlyCopyable, Movable):
     def __iter__(self) -> Self:
         return self
 
-    def __next__(mut self) raises -> MorrowSpan:
+    def _step(mut self) raises -> Optional[MorrowSpan]:
         if self.remaining != _UNBOUNDED_LIMIT and self.remaining <= 0:
-            raise StopIteration()
+            return None
         if self.started:
             if self.exact:
                 self.current = self.current._shift_frame_preserving_day(
@@ -105,7 +105,7 @@ struct MorrowSpanIterator(Copyable, ImplicitlyCopyable, Movable):
         var end_key = self.end._utc_microseconds()
         var key = self.current._utc_microseconds()
         if key > end_key or (self.exact and key == end_key):
-            raise StopIteration()
+            return None
         var span = self.current.span(
             self.frame,
             count=self.step,
@@ -116,7 +116,7 @@ struct MorrowSpanIterator(Copyable, ImplicitlyCopyable, Movable):
         if self.exact:
             var start_key = span.start._utc_microseconds()
             if start_key == end_key or start_key - 1 == end_key:
-                raise StopIteration()
+                return None
             if span.end._utc_microseconds() > end_key:
                 span.end = self.end
                 if Int(self.bounds.as_bytes()[1]) == ord(")"):
@@ -125,6 +125,12 @@ struct MorrowSpanIterator(Copyable, ImplicitlyCopyable, Movable):
         if self.remaining != _UNBOUNDED_LIMIT:
             self.remaining -= 1
         return span
+
+    def __next__(mut self) raises -> MorrowSpan:
+        var step = self._step()
+        if step:
+            return step.take()
+        raise StopIteration()
 
 
 struct MorrowIntervalIterator(Copyable, ImplicitlyCopyable, Movable):
@@ -168,9 +174,10 @@ struct MorrowIntervalIterator(Copyable, ImplicitlyCopyable, Movable):
             raise StopIteration()
         var span = self.spans.__next__()
         for _ in range(1, self.group):
-            try:
-                span.end = self.spans.__next__().end
-            except StopIteration:
+            var more = self.spans._step()
+            if more:
+                span.end = more.value().end
+            else:
                 break
         if self.remaining != _UNBOUNDED_LIMIT:
             self.remaining -= 1

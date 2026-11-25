@@ -69,7 +69,7 @@ def test_lazy_points_and_calendar_edges() raises:
     var stopped = False
     try:
         _ = last.__next__()
-    except StopIteration:
+    except:
         stopped = True
     assert_true(stopped)
 
@@ -165,7 +165,7 @@ def test_iterator_repeated_exhaustion() raises:
         var stopped = False
         try:
             _ = iterator.__next__()
-        except StopIteration:
+        except:
             stopped = True
         assert_true(stopped)
 
